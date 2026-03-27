@@ -45,14 +45,25 @@ rm -rf /root/.claude 2>/dev/null || true
 rm -rf "$HOME/.claude" 2>/dev/null || true
 success "Config directories removed."
 
-# ── 5. Temp files ─────────────────────────────────────────────────────────────
+# ── 5. Config JSON file and cache directory ───────────────────────────────────
+info "Removing /root/.claude.json config file..."
+rm -f /root/.claude.json 2>/dev/null || true
+rm -f "$HOME/.claude.json" 2>/dev/null || true
+success "Config JSON file removed."
+
+info "Removing Claude cache directory..."
+rm -rf /root/.cache/claude-cli-nodejs 2>/dev/null || true
+rm -rf "$HOME/.cache/claude-cli-nodejs" 2>/dev/null || true
+success "Cache directory removed."
+
+# ── 6. Temp files ─────────────────────────────────────────────────────────────
 info "Cleaning up temp files in /tmp/..."
 rm -f /tmp/claude-code.log /tmp/claude-command 2>/dev/null || true
 rm -f /tmp/claude-code-*.diag.log 2>/dev/null || true
 rm -rf /tmp/claude-0 2>/dev/null || true
 success "Temp files cleaned."
 
-# ── 6. Verify ─────────────────────────────────────────────────────────────────
+# ── 7. Verify ─────────────────────────────────────────────────────────────────
 echo ""
 echo "========================================"
 echo "  Verification"
