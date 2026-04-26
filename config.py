@@ -2,9 +2,8 @@ from pathlib import Path
 from dotenv import load_dotenv
 import os
 
-load_dotenv()
-
 ROOT = Path(__file__).parent
+load_dotenv(ROOT / ".env")
 
 ANTHROPIC_API_KEY = os.getenv("ANTHROPIC_API_KEY", "")
 EAGLE_API_URL = os.getenv("EAGLE_API_URL", "http://localhost:41595")
