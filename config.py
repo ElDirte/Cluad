@@ -6,7 +6,7 @@ ROOT = Path(__file__).parent
 # Read .env manually — avoids dotenv path/encoding issues on Windows
 _env_file = ROOT / ".env"
 if _env_file.exists():
-    for _line in _env_file.read_text(encoding="utf-8").splitlines():
+    for _line in _env_file.read_text(encoding="utf-8-sig").splitlines():
         _line = _line.strip()
         if _line and not _line.startswith("#") and "=" in _line:
             _k, _v = _line.split("=", 1)

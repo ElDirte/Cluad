@@ -13,6 +13,11 @@ if not exist ".env" (
     exit /b 1
 )
 
+REM Load .env into environment using PowerShell
+FOR /F "tokens=*" %%i IN ('PowerShell -Command "Get-Content .env | Where-Object { $_ -notmatch '^#' -and $_ -match '=' } | ForEach-Object { $_ }"') DO (
+    SET "%%i"
+)
+
 REM Check Eagle is running
 curl -s http://localhost:41595/api/application/info >nul 2>&1
 if %errorlevel% neq 0 (
