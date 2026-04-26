@@ -177,9 +177,9 @@ def format_approval_table(analyses: list[dict]) -> str:
     User responds with: 1y 2n 3edit etc.
     """
     header = (
-        "**Intake Review** — respond with row numbers to approve/reject/edit:\n"
-        "`1y` = approve row 1 | `1n` = reject | `1edit name=new-name tags=use:design-idea` = edit\n"
-        "`all-y` = approve all high-confidence | `done` = finish this batch\n\n"
+        "**Intake Review** — respond with row numbers:\n"
+        "`1y` approve · `1n` reject · `1edit name=new-name tags=use:ref,topic:ai folder=Work` edit+approve\n"
+        "`all-y` approve all high/medium · `done` finish batch\n\n"
     )
 
     rows = []
@@ -201,48 +201,81 @@ def parse_approval_response(response: str, analyses: list[dict]) -> tuple[list[d
     """
     Parse user approval response into approved, rejected, and messages.
     Returns: (approved_changes, rejected_items, messages)
+
+    Supported formats:
+      1y 2n 3y                             — approve/reject by row number
+      3edit name=new-name tags=use:ref     — edit then approve row 3
+      all-y                                — approve all high/medium confidence
+      done                                 — finish batch
     """
-    response = response.strip().lower()
+    response_raw = response.strip()
+    response_lower = response_raw.lower()
     approved = []
     rejected = []
     messages = []
 
-    if response == "all-y":
-        for a in analyses:
+    if response_lower == "all-y":
+        for i, a in enumerate(analyses):
             if a["confidence_label"] in ("high", "medium"):
                 approved.append(_analysis_to_change(a))
             else:
-                messages.append(f"Skipped #{analyses.index(a)+1} (confidence too low for auto-approve)")
+                messages.append(f"Skipped #{i+1} (confidence too low for auto-approve)")
         return approved, rejected, messages
 
-    for token in response.split():
-        if not token:
-            continue
-
-        row_match = re.match(r"^(\d+)(y|n|edit)", token)
-        if not row_match:
-            continue
-
-        idx = int(row_match.group(1)) - 1
-        action = row_match.group(2)
-
+    # Edit directives: e.g. "3edit name=foo tags=use:ref,topic:ai folder=Work"
+    # Must be processed before y/n so edits don't also match as plain approvals.
+    edited_rows: set[int] = set()
+    for m in re.finditer(r'(\d+)edit((?:\s+\w+=[^\s]+)+)', response_raw, re.IGNORECASE):
+        idx = int(m.group(1)) - 1
         if idx < 0 or idx >= len(analyses):
             messages.append(f"Row {idx+1} out of range")
             continue
+        a = dict(analyses[idx])
+        for kv in re.finditer(r'(\w+)=([^\s]+)', m.group(2)):
+            key, val = kv.group(1).lower(), kv.group(2)
+            if key == "name":
+                a["suggested_name"] = val
+            elif key == "tags":
+                a["suggested_tags"] = [t.strip() for t in val.split(",") if t.strip()]
+            elif key == "folder":
+                a["suggested_folder"] = val
+        approved.append(_analysis_to_change(a))
+        edited_rows.add(idx)
 
+    # Plain y/n tokens
+    for token in response_lower.split():
+        m = re.match(r'^(\d+)(y|n)$', token)
+        if not m:
+            continue
+        idx = int(m.group(1)) - 1
+        if idx in edited_rows:
+            continue
+        if idx < 0 or idx >= len(analyses):
+            messages.append(f"Row {idx+1} out of range")
+            continue
         a = analyses[idx]
-        if action == "y":
+        if m.group(2) == "y":
             approved.append(_analysis_to_change(a))
-        elif action == "n":
+        else:
             rejected.append({"item_id": a["item_id"], "original_name": a["original_name"]})
 
     return approved, rejected, messages
 
 
 def _analysis_to_change(a: dict) -> dict:
-    return {
+    change = {
         "id": a["item_id"],
         "name": a["suggested_name"],
         "tags": a["suggested_tags"],
         "annotation": a.get("summary", ""),
     }
+    folder_name = a.get("suggested_folder", "")
+    if folder_name and folder_name != "The Pile":
+        try:
+            from tools.eagle_api import find_folder_by_name
+            folder = find_folder_by_name(folder_name)
+            if folder:
+                change["folders"] = [folder["id"]]
+        except Exception:
+            pass
+    return change
