@@ -87,13 +87,17 @@ def find_folder_by_name(name: str) -> Optional[dict]:
     return None
 
 
-def get_staging_items(limit: int = 20, offset: int = 0) -> tuple[list[dict], Optional[str]]:
+def get_staging_items(limit: int = 20, offset: int = 0, folder_name: str = None) -> tuple[list[dict], Optional[str]]:
     """
-    Return untagged items from The Pile (the staging area).
+    Return untagged items for intake review.
+    If folder_name is given, scopes to that folder. Otherwise searches all folders.
     Returns (items, folder_id).
     """
-    folder = find_folder_by_name("The Pile")
-    folder_id = folder["id"] if folder else None
+    folder_id = None
+    if folder_name:
+        folder = find_folder_by_name(folder_name)
+        folder_id = folder["id"] if folder else None
+
     items = get_items(folder_id=folder_id, limit=limit, offset=offset, is_untagged=True)
     return items, folder_id
 
