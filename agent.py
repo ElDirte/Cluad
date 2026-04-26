@@ -103,9 +103,6 @@ async def on_message(message: cl.Message):
         if block.type == "tool_use":
             tool_calls_to_execute.append(block)
 
-    if accumulated_text:
-        history.append({"role": "assistant", "content": accumulated_text})
-
     # ── execute tool calls ────────────────────────────────────────────────────
     if tool_calls_to_execute:
         await response_msg.update()
@@ -134,6 +131,10 @@ async def on_message(message: cl.Message):
         if follow_text:
             await cl.Message(content=follow_text).send()
             history.append({"role": "assistant", "content": follow_text})
+
+    else:
+        if accumulated_text:
+            history.append({"role": "assistant", "content": accumulated_text})
 
     cl.user_session.set("history", history[-40:])
     cl.user_session.set("pending_analyses", pending)

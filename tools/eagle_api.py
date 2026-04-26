@@ -99,10 +99,9 @@ def get_staging_items(limit: int = 20, offset: int = 0) -> tuple[list[dict], Opt
 
 
 def thumbnail_url(item: dict) -> str:
-    """Construct the thumbnail URL for an item (Eagle serves these locally)."""
+    """Construct the thumbnail URL for an item via Eagle API."""
     item_id = item.get("id", "")
-    ext = item.get("ext", "jpg")
-    return f"{EAGLE_API_URL}/thumbnail/{item_id}.{ext}"
+    return f"{EAGLE_API_URL}/api/item/thumbnail?id={item_id}"
 
 
 def apply_changes(changes: list[dict]) -> list[dict]:
