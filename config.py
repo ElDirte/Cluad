@@ -1,9 +1,16 @@
 from pathlib import Path
-from dotenv import load_dotenv
 import os
 
 ROOT = Path(__file__).parent
-load_dotenv(ROOT / ".env")
+
+# Read .env manually — avoids dotenv path/encoding issues on Windows
+_env_file = ROOT / ".env"
+if _env_file.exists():
+    for _line in _env_file.read_text(encoding="utf-8").splitlines():
+        _line = _line.strip()
+        if _line and not _line.startswith("#") and "=" in _line:
+            _k, _v = _line.split("=", 1)
+            os.environ.setdefault(_k.strip(), _v.strip())
 
 ANTHROPIC_API_KEY = os.getenv("ANTHROPIC_API_KEY", "")
 EAGLE_API_URL = os.getenv("EAGLE_API_URL", "http://localhost:41595")
