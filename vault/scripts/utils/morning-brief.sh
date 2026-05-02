@@ -28,7 +28,7 @@ try:
     cur = con.cursor()
 
     # Last session summary
-    cur.execute("SELECT created_at, summary FROM sessions ORDER BY created_at DESC LIMIT 1")
+    cur.execute("SELECT ts, summary FROM sessions ORDER BY ts DESC LIMIT 1")
     row = cur.fetchone()
     if row:
         print(f"Last Eagle session : {row[0][:16]}  —  {row[1] or '(no summary)'}")
@@ -38,7 +38,7 @@ try:
     # Recent decisions
     cur.execute("""
         SELECT COUNT(*) FROM decisions
-        WHERE date(created_at) = date('now')
+        WHERE date(ts) = date('now')
     """)
     today_count = cur.fetchone()[0]
 
@@ -48,8 +48,8 @@ try:
     total_approved = cur.fetchone()[0]
 
     cur.execute("""
-        SELECT original_name, final_tags, approved
-        FROM decisions ORDER BY created_at DESC LIMIT 5
+        SELECT original, final_tags, approved
+        FROM decisions ORDER BY ts DESC LIMIT 5
     """)
     recent = cur.fetchall()
 
