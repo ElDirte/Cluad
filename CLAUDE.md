@@ -1,7 +1,22 @@
 # The System — Agent Memory
 
 ## Owner
-Kenneth (Allen Watts)
+Allen Watts (goes by Allen or Kenneth — both are correct)
+
+## Household
+- **Allen** — 33, male, owner
+- **Alaina** — 30, female, partner
+- **Kain** — 8, son
+- **Syrus** — 4, son
+- **Oliver** — 1, son (as of May 2026)
+
+## File Naming Philosophy
+Name files the way a person would on their very first literal look — natural, direct, specific.
+Use family names when people are visible. Never use generic placeholders like "person", "boy", "girl", "image", "file".
+Screenshots / PDFs / diagrams / UI captures are saved for one of three reasons:
+  1. Style or design reference
+  2. The information inside
+  3. A thread to explore later
 
 ## What This System Is
 A personal AI agent acting as extended executive function. It controls software on the PC,

@@ -14,36 +14,39 @@ from config import OLLAMA_API_URL, VISION_MODEL, ANTHROPIC_API_KEY, CONFIDENCE_T
 
 _claude = anthropic.Anthropic(api_key=ANTHROPIC_API_KEY)
 
-IMAGE_EXTS = {"jpg", "jpeg", "png", "gif", "webp", "bmp", "tiff", "heic", "avif", "svg"}
-VIDEO_EXTS = {"mp4", "mov", "avi", "mkv", "webm"}
-DOC_EXTS = {"pdf", "docx", "doc", "txt", "md", "rtf", "xlsx", "csv"}
+PERSONAL_CONTEXT = """
+Owner: Allen Watts (33, male)
+Household: Alaina (30, female — partner), Kain (8, son), Syrus (4, son), Oliver (1, son)
+Recurring subjects: family at home, backyard garden, plant grows (GroPhoTo project),
+Archer the animated show, AI tools and interfaces, work documents, personal photos.
 
-
-def _fetch_thumbnail_bytes(item: dict) -> Optional[bytes]:
-    """Fetch thumbnail bytes from Eagle for vision analysis."""
-    from tools.eagle_api import thumbnail_url
-    url = thumbnail_url(item)
-    try:
-        resp = requests.get(url, timeout=10)
-        if resp.status_code == 200:
-            return resp.content
-    except Exception:
-        pass
-    return None
+Screenshots / PDFs / diagrams / UI captures / graphs / threads are typically saved for one of three reasons:
+  1. Style or design reference (look, layout, color, aesthetic)
+  2. The information inside (data, guide, explainer, tutorial)
+  3. A thread to explore later (something interesting, a rabbit hole, a lead)
+"""
 
 
 def _analyze_image_with_ollama(image_bytes: bytes, filename: str) -> dict:
     """Send image to Ollama llava for vision analysis."""
     b64 = base64.b64encode(image_bytes).decode()
     prompt = (
-        f"Analyze this image (filename: {filename}). Describe:\n"
-        "1. What is shown in the image (objects, scene, people, text, UI elements, etc.)\n"
-        "2. What type of image is it (photo, screenshot, diagram, artwork, meme, etc.)\n"
-        "3. What was this likely saved for (design reference, memory, reminder, AI reference, "
-        "project material, research, personal archive, inspiration)?\n"
-        "4. Suggest a short descriptive filename (no extension, lowercase, hyphens only, max 5 words)\n"
-        "5. Suggest 3-5 tags using these prefixes: use:, topic:, src:, q:\n"
-        "Be concise. Format as: TYPE | SUMMARY | SUGGESTED_NAME | TAGS | CONFIDENCE(0-100)"
+        f"Analyze this image (filename: {filename}).\n\n"
+        f"Context about the owner:\n{PERSONAL_CONTEXT}\n"
+        "Name it the way a person would on their very first literal look — natural, direct, specific.\n"
+        "Use family names if you can identify people (Kain, Syrus, Oliver, Alaina, Allen).\n"
+        "Good examples: 'kain-birthday-cake', 'alaina-kitchen-morning', 'backyard-raised-beds',\n"
+        "  'claude-ui-dark-mode', 'living-room-couch-inspo', 'syrus-bath-time'\n"
+        "Bad examples: 'boy-with-food', 'person-in-room', 'screenshot-image', 'file-001'\n\n"
+        "Respond in exactly this format:\n"
+        "TYPE: photo/screenshot/diagram/artwork/document/meme/ui-capture/etc\n"
+        "SUMMARY: one sentence — what you literally see first, use names if known\n"
+        "NAME: natural-first-look-name (lowercase, hyphens, max 5 words, no date)\n"
+        "TAGS: 3-5 tags using prefixes: use:, topic:, src:, q:\n"
+        "FOLDER: one of [Camera Roll, Family, GroPhoTo, Ai_Tool_Diagrams, Art_Backgrounds, "
+        "Work, Screenshots, lookinto, Archer, Psilly, Garden Pics, Fandom, The Pile]\n"
+        "CONFIDENCE: 0-100\n"
+        "REASON: one sentence on why this folder/name"
     )
 
     try:
@@ -61,28 +64,24 @@ def _analyze_image_with_ollama(image_bytes: bytes, filename: str) -> dict:
 def _analyze_with_claude(filename: str, ext: str, context: str = "") -> dict:
     """Use Claude to classify non-image files or enrich image analysis."""
     prompt = (
-        f"Analyze this file for an Eagle asset library intake.\n"
-        f"Filename: {filename}\n"
-        f"File type: {ext}\n"
+        f"Analyze this file for Allen Watts's personal Eagle library.\n\n"
+        f"File: {filename} (.{ext})\n"
         f"Context: {context}\n\n"
-        "Provide:\n"
-        "1. Inferred type (screenshot/photo/diagram/document/reference/etc.)\n"
-        "2. Short summary (1-2 sentences)\n"
-        "3. Proposed filename (YYYY-MM-DD_topic_use_shortdesc format, no extension)\n"
-        "4. Proposed tags (use prefixes: use:, topic:, src:, status:, q:, proj:)\n"
-        "5. Suggested folder from: [26 Image Organization, Archer, Camera Roll, GroPhoTo, "
-        "Ai_Tool_Diagrams, Art_Backgrounds, Work, Family, lookinto, idpics, Rabbit holes, "
-        "Screenshots, Psilly, Garden Pics, Fandom, The Pile]\n"
-        "6. Confidence score 0-100\n"
-        "7. Reasoning (1 sentence)\n\n"
+        f"Owner context:\n{PERSONAL_CONTEXT}\n"
+        "Name it the way a person would on their very first literal look — natural and specific.\n"
+        "Screenshots, PDFs, diagrams, UI captures: identify if it's a style reference, "
+        "info to extract, or a thread to explore. Name accordingly.\n"
+        "Good names: 'claude-ui-dark-theme', 'backyard-layout-plan', 'kain-school-photo-2026'\n"
+        "Bad names: 'screenshot-001', 'document-file', 'image-reference'\n\n"
         "Format exactly as:\n"
-        "TYPE: ...\n"
-        "SUMMARY: ...\n"
-        "NAME: ...\n"
-        "TAGS: tag1, tag2, tag3\n"
-        "FOLDER: ...\n"
-        "CONFIDENCE: 85\n"
-        "REASON: ..."
+        "TYPE: photo/screenshot/diagram/document/ui-capture/thread/etc\n"
+        "SUMMARY: one natural sentence — what it literally is\n"
+        "NAME: natural-first-look-name (lowercase, hyphens, max 5 words, no date)\n"
+        "TAGS: use:, topic:, src:, q: prefixes (3-5 tags)\n"
+        "FOLDER: one of [Camera Roll, Family, GroPhoTo, Ai_Tool_Diagrams, Art_Backgrounds, "
+        "Work, Screenshots, lookinto, Archer, Psilly, Garden Pics, Fandom, The Pile]\n"
+        "CONFIDENCE: 0-100\n"
+        "REASON: one sentence"
     )
 
     try:
