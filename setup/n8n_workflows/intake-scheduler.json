@@ -4,11 +4,16 @@
     {
       "parameters": {
         "rule": {
-          "interval": [{ "field": "minutes", "minutesInterval": 15 }]
+          "interval": [
+            {
+              "field": "cronExpression",
+              "expression": "0 8,20 * * *"
+            }
+          ]
         }
       },
       "id": "a1b2c3d4-0001-0001-0001-000000000001",
-      "name": "Every 15 Minutes",
+      "name": "8am and 8pm Daily",
       "type": "n8n-nodes-base.scheduleTrigger",
       "typeVersion": 1.1,
       "position": [200, 300]
