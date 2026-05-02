@@ -1,0 +1,71 @@
+{
+  "name": "Second Brain — Morning Brief",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "cronExpression",
+              "expression": "0 8 * * *"
+            }
+          ]
+        }
+      },
+      "id": "b2c3d4e5-0002-0002-0002-000000000001",
+      "name": "Daily at 8am",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.1,
+      "position": [200, 300]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "http://host.docker.internal:8001/brief",
+        "options": { "timeout": 30000 }
+      },
+      "id": "b2c3d4e5-0002-0002-0002-000000000002",
+      "name": "Fetch Brief",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [420, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "const b = $input.first().json;\nconst inbox = b.inbox || {};\nconst logseq = b.logseq || {};\nconst dec = b.decisions || {};\n\nconst totalUntagged = Object.values(inbox).reduce((s, v) => s + (v.untagged || 0), 0);\nconst totalFiles = Object.values(inbox).reduce((s, v) => s + (v.total || 0), 0);\n\nconst lines = [\n  `=== SECOND BRAIN BRIEF: ${new Date().toISOString().slice(0,10)} ===`,\n  ``,\n  `Inbox     : ${totalFiles} files  (${totalUntagged} untagged)`,\n  `  claude-sessions : ${inbox['claude-sessions']?.total || 0}`,\n  `  transcripts     : ${inbox['transcripts']?.total || 0}`,\n  `  gmail           : ${inbox['gmail']?.total || 0}`,\n  ``,\n  `Logseq    : ${logseq.pages || 0} pages  |  ${logseq.journals || 0} journals`,\n  ``,\n  `Decisions : ${dec.total || 0} total  |  ${dec.approved || 0} approved`,\n  `Last file : ${dec.last_file || 'none'}`,\n  `Last seen : ${dec.last_ts ? dec.last_ts.slice(0,16) : 'never'}`,\n];\n\nreturn [{ json: { summary: lines.join('\\n'), raw: b } }];"
+      },
+      "id": "b2c3d4e5-0002-0002-0002-000000000003",
+      "name": "Format Brief",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [640, 300]
+    },
+    {
+      "parameters": {
+        "operation": "appendOrCreate",
+        "filePath": "={{ $env.VAULT_ROOT || 'C:/Users/Allen Watts/SecondBrain' }}/logs/daily-brief.log",
+        "text": "={{ $json.summary }}\n\n"
+      },
+      "id": "b2c3d4e5-0002-0002-0002-000000000004",
+      "name": "Log to File",
+      "type": "n8n-nodes-base.writeFile",
+      "typeVersion": 1,
+      "position": [860, 300]
+    }
+  ],
+  "connections": {
+    "Daily at 8am": {
+      "main": [[{ "node": "Fetch Brief", "type": "main", "index": 0 }]]
+    },
+    "Fetch Brief": {
+      "main": [[{ "node": "Format Brief", "type": "main", "index": 0 }]]
+    },
+    "Format Brief": {
+      "main": [[{ "node": "Log to File", "type": "main", "index": 0 }]]
+    }
+  },
+  "active": false,
+  "settings": { "executionOrder": "v1" },
+  "tags": [{ "name": "second-brain" }],
+  "meta": { "templateCredsSetupCompleted": true }
+}

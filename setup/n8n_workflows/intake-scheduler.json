@@ -1,0 +1,95 @@
+{
+  "name": "Second Brain — Intake + Process",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [{ "field": "minutes", "minutesInterval": 15 }]
+        }
+      },
+      "id": "a1b2c3d4-0001-0001-0001-000000000001",
+      "name": "Every 15 Minutes",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.1,
+      "position": [200, 300]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://host.docker.internal:8001/intake",
+        "options": { "timeout": 120000 }
+      },
+      "id": "a1b2c3d4-0001-0001-0001-000000000002",
+      "name": "Run Intake",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [420, 300]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": { "caseSensitive": true, "leftValue": "", "typeValidation": "strict" },
+          "conditions": [
+            {
+              "id": "check-ok",
+              "leftValue": "={{ $json.ok }}",
+              "rightValue": true,
+              "operator": { "type": "boolean", "operation": "equals" }
+            }
+          ],
+          "combinator": "and"
+        }
+      },
+      "id": "a1b2c3d4-0001-0001-0001-000000000003",
+      "name": "Intake OK?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [640, 300]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://host.docker.internal:8001/process",
+        "options": { "timeout": 300000 }
+      },
+      "id": "a1b2c3d4-0001-0001-0001-000000000004",
+      "name": "Run Process (Tag + Route)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [860, 220]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://host.docker.internal:8001/snapshot",
+        "options": { "timeout": 30000 }
+      },
+      "id": "a1b2c3d4-0001-0001-0001-000000000005",
+      "name": "Git Snapshot",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [1080, 220]
+    }
+  ],
+  "connections": {
+    "Every 15 Minutes": {
+      "main": [[{ "node": "Run Intake", "type": "main", "index": 0 }]]
+    },
+    "Run Intake": {
+      "main": [[{ "node": "Intake OK?", "type": "main", "index": 0 }]]
+    },
+    "Intake OK?": {
+      "main": [
+        [{ "node": "Run Process (Tag + Route)", "type": "main", "index": 0 }],
+        []
+      ]
+    },
+    "Run Process (Tag + Route)": {
+      "main": [[{ "node": "Git Snapshot", "type": "main", "index": 0 }]]
+    }
+  },
+  "active": false,
+  "settings": { "executionOrder": "v1" },
+  "tags": [{ "name": "second-brain" }],
+  "meta": { "templateCredsSetupCompleted": true }
+}
