@@ -17,7 +17,7 @@ services:
     environment:
       - VAULT_ROOT=/data/vault
       - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}
-      - OLLAMA_URL=http://ollama:11434
+      - OLLAMA_URL=http://host.docker.internal:11434
       - NEO4J_URI=bolt://neo4j:7687
       - NEO4J_USER=${NEO4J_USER:-neo4j}
       - NEO4J_PASSWORD=${NEO4J_PASSWORD:-changeme}
@@ -25,9 +25,10 @@ services:
       - NOTION_DATABASE_ID=${NOTION_DATABASE_ID:-}
     volumes:
       - vault_data:/data/vault
-      - .:/app                        # live code — changes apply without rebuild
+      - .:/app
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     depends_on:
-      - ollama
       - neo4j
 
   # ── Automation scheduler ──────────────────────────────────────────
@@ -59,8 +60,8 @@ services:
     container_name: brain-neo4j
     restart: unless-stopped
     ports:
-      - "7474:7474"   # browser UI
-      - "7687:7687"   # bolt (queries)
+      - "7474:7474"
+      - "7687:7687"
     environment:
       - NEO4J_AUTH=${NEO4J_USER:-neo4j}/${NEO4J_PASSWORD:-changeme}
       - NEO4J_PLUGINS=["apoc"]
@@ -69,27 +70,11 @@ services:
       - neo4j_data:/data
       - neo4j_logs:/logs
 
-  # ── Local AI (tagging, analysis) ──────────────────────────────────
-  ollama:
-    image: ollama/ollama:latest
-    container_name: brain-ollama
-    restart: unless-stopped
-    ports:
-      - "11434:11434"
-    volumes:
-      - ollama_data:/root/.ollama
-    # GPU support (uncomment if you have NVIDIA GPU + nvidia-container-toolkit)
-    # deploy:
-    #   resources:
-    #     reservations:
-    #       devices:
-    #         - driver: nvidia
-    #           count: all
-    #           capabilities: [gpu]
+  # Ollama runs natively on Windows — no container needed.
+  # brain-api and vault scripts reach it via host.docker.internal:11434
 
 volumes:
-  vault_data:     # SecondBrain files — survives container restarts
-  n8n_data:       # n8n workflows and credentials
-  neo4j_data:     # graph database
+  vault_data:
+  n8n_data:
+  neo4j_data:
   neo4j_logs:
-  ollama_data:    # downloaded AI models (large — ~4GB)
