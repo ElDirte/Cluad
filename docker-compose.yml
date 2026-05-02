@@ -1,0 +1,95 @@
+version: "3.8"
+
+# The System — Full Stack
+# Start everything:  docker-compose up -d
+# Stop everything:   docker-compose down
+# Move to new PC:    bash scripts/export-stack.sh → copy folder → bash scripts/import-stack.sh
+
+services:
+
+  # ── Your pipeline API ─────────────────────────────────────────────
+  brain-api:
+    build: .
+    container_name: brain-api
+    restart: unless-stopped
+    ports:
+      - "8001:8001"
+    environment:
+      - VAULT_ROOT=/data/vault
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}
+      - OLLAMA_URL=http://ollama:11434
+      - NEO4J_URI=bolt://neo4j:7687
+      - NEO4J_USER=${NEO4J_USER:-neo4j}
+      - NEO4J_PASSWORD=${NEO4J_PASSWORD:-changeme}
+      - NOTION_TOKEN=${NOTION_TOKEN:-}
+      - NOTION_DATABASE_ID=${NOTION_DATABASE_ID:-}
+    volumes:
+      - vault_data:/data/vault
+      - .:/app                        # live code — changes apply without rebuild
+    depends_on:
+      - ollama
+      - neo4j
+
+  # ── Automation scheduler ──────────────────────────────────────────
+  n8n:
+    image: n8nio/n8n:latest
+    container_name: brain-n8n
+    restart: unless-stopped
+    ports:
+      - "5678:5678"
+    environment:
+      - N8N_BASIC_AUTH_ACTIVE=true
+      - N8N_BASIC_AUTH_USER=${N8N_USER:-admin}
+      - N8N_BASIC_AUTH_PASSWORD=${N8N_PASSWORD:-changeme}
+      - N8N_HOST=localhost
+      - N8N_PORT=5678
+      - N8N_PROTOCOL=http
+      - WEBHOOK_URL=http://localhost:5678/
+      - GENERIC_TIMEZONE=America/Chicago
+      - TZ=America/Chicago
+    volumes:
+      - n8n_data:/home/node/.n8n
+      - ./setup/n8n_workflows:/data/workflows:ro
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+
+  # ── Graph database ────────────────────────────────────────────────
+  neo4j:
+    image: neo4j:5-community
+    container_name: brain-neo4j
+    restart: unless-stopped
+    ports:
+      - "7474:7474"   # browser UI
+      - "7687:7687"   # bolt (queries)
+    environment:
+      - NEO4J_AUTH=${NEO4J_USER:-neo4j}/${NEO4J_PASSWORD:-changeme}
+      - NEO4J_PLUGINS=["apoc"]
+      - NEO4J_dbms_security_procedures_unrestricted=apoc.*
+    volumes:
+      - neo4j_data:/data
+      - neo4j_logs:/logs
+
+  # ── Local AI (tagging, analysis) ──────────────────────────────────
+  ollama:
+    image: ollama/ollama:latest
+    container_name: brain-ollama
+    restart: unless-stopped
+    ports:
+      - "11434:11434"
+    volumes:
+      - ollama_data:/root/.ollama
+    # GPU support (uncomment if you have NVIDIA GPU + nvidia-container-toolkit)
+    # deploy:
+    #   resources:
+    #     reservations:
+    #       devices:
+    #         - driver: nvidia
+    #           count: all
+    #           capabilities: [gpu]
+
+volumes:
+  vault_data:     # SecondBrain files — survives container restarts
+  n8n_data:       # n8n workflows and credentials
+  neo4j_data:     # graph database
+  neo4j_logs:
+  ollama_data:    # downloaded AI models (large — ~4GB)
