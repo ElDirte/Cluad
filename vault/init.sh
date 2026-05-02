@@ -76,10 +76,12 @@ if [ ! -f "$LOGSEQ_CONFIG" ]; then
 {:meta/version 1
  :preferred-format :markdown
  :journal/page-title-format "yyyy-MM-dd"
- :journal/file-name-format "yyyy_MM_dd"
+ :journal/file-name-format "yyyy-MM-dd"
  :feature/enable-journals? true
  :feature/enable-whiteboards? false
- :ui/enable-tooltip? true}
+ :ui/enable-tooltip? true
+ :ui/show-brackets? false
+ :editor/preferred-pasting-file? false}
 EOF
   echo "[ok] Logseq config.edn written"
 fi
