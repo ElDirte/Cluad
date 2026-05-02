@@ -16,9 +16,9 @@ log() { echo "[$(date '+%H:%M:%S')] $*"; }
 run_brief()    { bash "$SCRIPT_DIR/utils/morning-brief.sh"; }
 run_intake()   {
   log "--- INTAKE ---"
-  bash "$SCRIPT_DIR/intake/ingest-claude.sh"
-  bash "$SCRIPT_DIR/intake/ingest-transcripts.sh"
-  bash "$SCRIPT_DIR/intake/ingest-gmail.sh"
+  bash "$SCRIPT_DIR/intake/ingest-claude.sh"      || log "[warn] ingest-claude failed (skipping)"
+  bash "$SCRIPT_DIR/intake/ingest-transcripts.sh" || log "[warn] ingest-transcripts failed (skipping)"
+  bash "$SCRIPT_DIR/intake/ingest-gmail.sh"       || log "[warn] ingest-gmail failed (skipping)"
 }
 run_process()  {
   log "--- PROCESS ---"
@@ -27,7 +27,9 @@ run_process()  {
 }
 run_sync()     {
   log "--- SYNC ---"
-  bash "$SCRIPT_DIR/sync/neo4j-health.sh" && bash "$SCRIPT_DIR/sync/logseq-to-neo4j.sh" || log "[warn] Neo4j unavailable — skipping graph sync"
+  bash "$SCRIPT_DIR/sync/neo4j-health.sh" \
+    && bash "$SCRIPT_DIR/sync/logseq-to-neo4j.sh" \
+    || log "[warn] Neo4j unavailable — skipping graph sync"
 }
 run_snapshot() { bash "$SCRIPT_DIR/utils/git-snapshot.sh"; }
 
