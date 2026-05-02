@@ -1,0 +1,25 @@
+Test transcript — Second Brain intake pipeline
+Source: YouTube / personal notes
+Date: 2026-05-01
+
+Karpathy on personal wikis:
+The idea is that every meaningful thought you have, every decision, every link between
+concepts — that should live in a structured local file, not scattered across browser
+tabs and Slack threads. The wiki is not a journal, it is a map of how you think.
+
+Bryan Johnson angle:
+He logs everything quantifiable — sleep, HRV, blood work — and treats his past self
+as a database to query. The same principle applies to knowledge work. Your Claude
+sessions, your email threads, your project notes — that is your blood work. It is
+already being generated. You just are not capturing it.
+
+Key insight:
+Most people have a massive text trail and zero retrieval. The gap between "I thought
+about this once" and "I can query what I thought about this" is just infrastructure.
+That infrastructure is what we are building.
+
+Action items:
+- Route Claude session logs into Logseq daily
+- Tag everything with project + intent prefix
+- Build GraphRAG query on top of Neo4j once 100 nodes exist
+- Revisit Bryan Johnson data protocol — apply to knowledge not biometrics
