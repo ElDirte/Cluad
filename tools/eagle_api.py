@@ -87,15 +87,54 @@ def find_folder_by_name(name: str) -> Optional[dict]:
     return None
 
 
+def get_all_subfolder_ids(parent_id: str, folders: list[dict], skip_names: list[str] = None) -> list[str]:
+    """
+    Recursively collect all folder IDs that are children of parent_id.
+    Skips any folder whose name is in skip_names.
+    """
+    skip_names = [n.lower() for n in (skip_names or [])]
+    result = []
+    for folder in folders:
+        if folder.get("parent") == parent_id:
+            if folder.get("name", "").lower() not in skip_names:
+                result.append(folder["id"])
+                result.extend(get_all_subfolder_ids(folder["id"], folders, skip_names))
+    return result
+
+
 def get_staging_items(limit: int = 20, offset: int = 0) -> tuple[list[dict], Optional[str]]:
     """
-    Return untagged items from The Pile (the staging area).
-    Returns (items, folder_id).
+    Return untagged items from The Pile and all its subfolders (except 26 Image Organization).
+    Queries each folder individually and merges results.
+    Returns (items, pile_folder_id).
     """
-    folder = find_folder_by_name("The Pile")
-    folder_id = folder["id"] if folder else None
-    items = get_items(folder_id=folder_id, limit=limit, offset=offset, is_untagged=True)
-    return items, folder_id
+    all_folders = get_folders()
+    pile = next((f for f in all_folders if f.get("name", "").lower() == "the pile"), None)
+    if not pile:
+        return [], None
+
+    pile_id = pile["id"]
+
+    # Collect The Pile + all subfolders except "26 Image Organization"
+    skip = ["26 image organization"]
+    subfolder_ids = get_all_subfolder_ids(pile_id, all_folders, skip_names=skip)
+    all_folder_ids = [pile_id] + subfolder_ids
+
+    # Gather untagged items across all folders, stop once we hit the limit
+    collected = []
+    for fid in all_folder_ids:
+        if len(collected) >= limit:
+            break
+        needed = limit - len(collected)
+        items = get_items(folder_id=fid, limit=needed + 5, offset=offset, is_untagged=True)
+        for item in items:
+            if not item.get("tags"):
+                item["_source_folder_id"] = fid
+                collected.append(item)
+            if len(collected) >= limit:
+                break
+
+    return collected[:limit], pile_id
 
 
 def thumbnail_url(item: dict) -> str:
