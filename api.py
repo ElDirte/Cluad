@@ -5,6 +5,7 @@ n8n calls http://host.docker.internal:8001/<command> on a schedule.
 """
 
 import os
+import platform
 import subprocess
 import sqlite3
 from pathlib import Path
@@ -18,6 +19,24 @@ load_dotenv()
 
 VAULT_ROOT = Path(os.environ.get("VAULT_ROOT", "~/SecondBrain")).expanduser()
 CNS = VAULT_ROOT / "scripts" / "cns.sh"
+
+
+def _find_bash() -> str:
+    """Locate Git Bash on Windows; fall back to system bash on Linux/Mac."""
+    if platform.system() != "Windows":
+        return "bash"
+    candidates = [
+        r"C:\Program Files\Git\bin\bash.exe",
+        r"C:\Program Files (x86)\Git\bin\bash.exe",
+        os.path.expandvars(r"%LOCALAPPDATA%\Programs\Git\bin\bash.exe"),
+    ]
+    for c in candidates:
+        if os.path.exists(c):
+            return c
+    return "bash"  # last resort
+
+
+BASH = _find_bash()
 DB_PATH = VAULT_ROOT / "data" / "decisions.db"
 
 app = FastAPI(title="Second Brain Pipeline API", version="1.0")
@@ -29,7 +48,7 @@ def run_script(command: str) -> dict:
         raise HTTPException(status_code=503, detail=f"cns.sh not found at {CNS}")
 
     result = subprocess.run(
-        ["bash", str(CNS), command],
+        [BASH, str(CNS), command],
         capture_output=True,
         text=True,
         timeout=300,
