@@ -18,7 +18,9 @@ from dotenv import load_dotenv
 load_dotenv()
 
 VAULT_ROOT = Path(os.environ.get("VAULT_ROOT", "~/SecondBrain")).expanduser()
-CNS = VAULT_ROOT / "scripts" / "cns.sh"
+# Always use scripts from the repo (auto-updated by git pull, no manual copying)
+REPO_DIR = Path(__file__).parent
+CNS = REPO_DIR / "vault" / "scripts" / "cns.sh"
 
 
 def _find_bash() -> str:
