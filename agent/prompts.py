@@ -7,17 +7,12 @@ Builds the system prompt for each session by combining:
 """
 
 from datetime import datetime
-from pathlib import Path
 
 from config import CLAUDE_MD_PATH
 from agent.memory import recall_all, get_session_summary
 
 
 def build_system_prompt(task_context: str = "") -> str:
-    """
-    Assemble the full system prompt for the agent session.
-    Called once at chat start and refreshed when context changes.
-    """
     today = datetime.now().strftime("%Y-%m-%d %H:%M")
 
     claude_md = ""
@@ -32,7 +27,6 @@ def build_system_prompt(task_context: str = "") -> str:
         )
 
     session_block = "\n## Last Session\n" + get_session_summary()
-
     task_block = f"\n## Current Task Context\n{task_context}" if task_context else ""
 
     return f"""You are The System — a personal AI agent acting as extended executive function for Kenneth (Allen Watts).
@@ -52,12 +46,13 @@ Core rules:
 - When uncertain, ask one focused question — not a list
 - Label your confidence level explicitly (high/medium/low/uncertain)
 - Prefer the smallest safe action when in doubt
-- If Eagle is not running, say so clearly and stop
+- If Notion catalog is unreachable, say so clearly and stop
 
 Current capabilities:
-- Eagle library management (The Pile intake, rename, tag, organize)
-- File analysis (vision AI for images, Claude for docs)
-- Memory of past decisions and routing patterns
+- File intake from configured folders (scan, analyze, tag, catalog)
+- Notion File Catalog management (tag, rename suggestions, status tracking)
+- File analysis (vision AI for images via Ollama, Claude for docs)
+- Memory of past decisions and routing patterns (mem0 + SQLite)
 - Session continuity (pick up where we left off)
 
 {claude_md}
@@ -66,7 +61,7 @@ Current capabilities:
 {task_block}
 
 When starting a session, always:
-1. Check if Eagle is running
+1. Check if the Notion File Catalog is connected
 2. Surface the last session summary
 3. Ask if they want to continue previous work or start something new
 """
@@ -74,40 +69,40 @@ When starting a session, always:
 
 TOOL_DEFINITIONS = [
     {
-        "name": "eagle_status",
-        "description": "Check if Eagle is running and get library info",
+        "name": "catalog_status",
+        "description": "Check if the Notion File Catalog is connected and get entry counts",
         "input_schema": {"type": "object", "properties": {}, "required": []},
     },
     {
-        "name": "eagle_get_staging",
-        "description": "List untagged items from The Pile (staging area) for intake review",
+        "name": "catalog_get_staging",
+        "description": "Scan intake folders for files not yet in the Notion File Catalog",
         "input_schema": {
             "type": "object",
             "properties": {
-                "limit": {"type": "integer", "description": "Number of items to fetch (default 15)", "default": 15},
+                "limit": {"type": "integer", "description": "Number of files to fetch (default 15)", "default": 15},
                 "offset": {"type": "integer", "description": "Pagination offset", "default": 0},
             },
             "required": [],
         },
     },
     {
-        "name": "eagle_analyze_batch",
-        "description": "Analyze a batch of Eagle items and generate an approval table",
+        "name": "catalog_analyze_batch",
+        "description": "Analyze a batch of files and generate an approval table with suggested names, tags, and quality ratings",
         "input_schema": {
             "type": "object",
             "properties": {
-                "item_ids": {
+                "paths": {
                     "type": "array",
                     "items": {"type": "string"},
-                    "description": "List of Eagle item IDs to analyze",
+                    "description": "List of file paths to analyze",
                 }
             },
-            "required": ["item_ids"],
+            "required": ["paths"],
         },
     },
     {
-        "name": "eagle_apply_approved",
-        "description": "Apply approved metadata changes to Eagle items. Only call after user has explicitly approved.",
+        "name": "catalog_apply_approved",
+        "description": "Write approved metadata to the Notion File Catalog. Only call after explicit user approval.",
         "input_schema": {
             "type": "object",
             "properties": {
@@ -116,27 +111,28 @@ TOOL_DEFINITIONS = [
                     "items": {
                         "type": "object",
                         "properties": {
-                            "id": {"type": "string"},
+                            "path": {"type": "string"},
                             "name": {"type": "string"},
                             "tags": {"type": "array", "items": {"type": "string"}},
                             "annotation": {"type": "string"},
+                            "quality": {"type": "string"},
                         },
-                        "required": ["id"],
+                        "required": ["path"],
                     },
-                    "description": "List of approved changes to apply",
                 }
             },
             "required": ["changes"],
         },
     },
     {
-        "name": "eagle_search",
-        "description": "Search Eagle library by keyword or tags",
+        "name": "catalog_search",
+        "description": "Search the Notion File Catalog by keyword, tags, or status",
         "input_schema": {
             "type": "object",
             "properties": {
-                "keyword": {"type": "string", "description": "Search keyword"},
-                "tags": {"type": "array", "items": {"type": "string"}, "description": "Filter by tags"},
+                "keyword": {"type": "string"},
+                "tags": {"type": "array", "items": {"type": "string"}},
+                "status": {"type": "string", "description": "staged / reviewed / needs-action / archived / done"},
                 "limit": {"type": "integer", "default": 20},
             },
             "required": [],
@@ -148,7 +144,7 @@ TOOL_DEFINITIONS = [
         "input_schema": {
             "type": "object",
             "properties": {
-                "content": {"type": "string", "description": "The preference or pattern to remember"},
+                "content": {"type": "string"},
             },
             "required": ["content"],
         },

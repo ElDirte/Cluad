@@ -1,6 +1,7 @@
 anthropic>=0.50.0
 chainlit>=2.0.0
 mem0ai>=0.1.0
+notion-client>=2.0.0
 requests>=2.31.0
 python-dotenv>=1.0.0
 ollama>=0.4.0

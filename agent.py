@@ -12,21 +12,20 @@ import anthropic
 from config import ANTHROPIC_API_KEY, PRIMARY_MODEL, INTAKE_BATCH_SIZE
 from agent.prompts import build_system_prompt, TOOL_DEFINITIONS
 from agent.memory import remember, recall, log_decision, log_voice_pattern
-from tools.eagle_api import (
-    is_running, get_library_info, get_staging_items, get_items,
-    apply_changes, format_item_summary, find_folder_by_name
+from tools.notion_catalog import (
+    is_connected, get_catalog_info, get_staging_items, get_items,
+    apply_changes, format_item_summary,
 )
 from tools.analyzer import analyze_item, format_approval_table, parse_approval_response
 
 _client = anthropic.Anthropic(api_key=ANTHROPIC_API_KEY)
 
-# In-memory state per session (Chainlit handles session isolation)
 _pending_analyses: list[dict] = []
 
 
 @cl.on_chat_start
 async def on_start():
-    """Initialize session: check Eagle, surface continuity, greet."""
+    """Initialize session: check Notion catalog, surface continuity, greet."""
     global _pending_analyses
     _pending_analyses = []
 
@@ -35,13 +34,15 @@ async def on_start():
     cl.user_session.set("history", [])
     cl.user_session.set("pending_analyses", [])
 
-    eagle_ok = is_running()
-    if eagle_ok:
-        lib = get_library_info()
-        lib_name = lib.get("name", "Unknown library")
-        status_line = f"Eagle connected — **{lib_name}**"
+    if is_connected():
+        info = get_catalog_info()
+        staged = info.get("staged", 0)
+        status_line = (
+            f"Notion File Catalog connected — **{info.get('name', 'NEXUS File Catalog')}** "
+            f"({staged} file{'s' if staged != 1 else ''} staged)"
+        )
     else:
-        status_line = "Eagle is **not running**. Open Eagle first, then refresh."
+        status_line = "⚠️ Notion File Catalog **not reachable**. Check NOTION_API_KEY in .env."
 
     from agent.memory import get_session_summary
     session_note = get_session_summary()
@@ -50,8 +51,7 @@ async def on_start():
         content=(
             f"{status_line}\n\n"
             f"**Last session:**\n{session_note}\n\n"
-            "What do you want to work on? Type `review` to start Eagle intake, "
-            "or just tell me what you need."
+            "Type `review` to start file intake, or tell me what you need."
         )
     ).send()
 
@@ -65,12 +65,10 @@ async def on_message(message: cl.Message):
 
     user_text = message.content.strip()
 
-    # ── shortcut: handle approval responses when a review is pending ──────────
     if pending and _looks_like_approval(user_text):
         await _handle_approval(user_text, pending)
         return
 
-    # ── standard agent loop ───────────────────────────────────────────────────
     history.append({"role": "user", "content": user_text})
 
     response_msg = cl.Message(content="")
@@ -93,17 +91,13 @@ async def on_message(message: cl.Message):
                     if delta:
                         accumulated_text += delta
                         await response_msg.stream_token(delta)
-                elif event.type == "content_block_stop":
-                    pass
 
         final = stream.get_final_message()
 
-    # collect tool use blocks
     for block in final.content:
         if block.type == "tool_use":
             tool_calls_to_execute.append(block)
 
-    # ── execute tool calls ────────────────────────────────────────────────────
     if tool_calls_to_execute:
         await response_msg.update()
         tool_results = []
@@ -125,13 +119,10 @@ async def on_message(message: cl.Message):
             tools=TOOL_DEFINITIONS,
             messages=history,
         )
-        follow_text = "".join(
-            b.text for b in follow_up.content if hasattr(b, "text")
-        )
+        follow_text = "".join(b.text for b in follow_up.content if hasattr(b, "text"))
         if follow_text:
             await cl.Message(content=follow_text).send()
             history.append({"role": "assistant", "content": follow_text})
-
     else:
         if accumulated_text:
             history.append({"role": "assistant", "content": accumulated_text})
@@ -143,60 +134,56 @@ async def on_message(message: cl.Message):
 # ─── Tool execution ────────────────────────────────────────────────────────────
 
 async def _execute_tool(name: str, inputs: dict, pending: list) -> dict:
-    """Dispatch tool calls to their implementations."""
 
-    if name == "eagle_status":
-        if is_running():
-            lib = get_library_info()
-            return {"status": "connected", "library": lib.get("name"), "path": lib.get("path")}
-        return {"status": "not_running", "message": "Open Eagle first"}
+    if name == "catalog_status":
+        if is_connected():
+            info = get_catalog_info()
+            return {"status": "connected", **info}
+        return {"status": "unreachable", "message": "Check NOTION_API_KEY in .env"}
 
-    elif name == "eagle_get_staging":
-        if not is_running():
-            return {"error": "Eagle not running"}
+    elif name == "catalog_get_staging":
+        if not is_connected():
+            return {"error": "Notion catalog unreachable"}
         limit = inputs.get("limit", INTAKE_BATCH_SIZE)
         offset = inputs.get("offset", 0)
-        items, folder_id = get_staging_items(limit=limit, offset=offset)
+        items, folder = get_staging_items(limit=limit, offset=offset)
         if not items:
-            return {"message": "No untagged items in The Pile. Staging is clear!"}
+            return {"message": "No new files found in intake folders. All caught up!"}
         summaries = [format_item_summary(i) for i in items]
         cl.user_session.set("_raw_items", items)
         return {
             "count": len(items),
-            "folder_id": folder_id,
+            "source_folder": folder,
             "items": summaries,
-            "item_ids": [i["id"] for i in items],
+            "paths": [i["path"] for i in items],
         }
 
-    elif name == "eagle_analyze_batch":
-        if not is_running():
-            return {"error": "Eagle not running"}
+    elif name == "catalog_analyze_batch":
+        if not is_connected():
+            return {"error": "Notion catalog unreachable"}
 
         raw_items = cl.user_session.get("_raw_items", [])
-        requested_ids = set(inputs.get("item_ids", []))
-
-        items_to_analyze = [i for i in raw_items if i["id"] in requested_ids] if requested_ids else raw_items[:INTAKE_BATCH_SIZE]
+        requested_paths = set(inputs.get("paths", []))
+        items_to_analyze = (
+            [i for i in raw_items if i["path"] in requested_paths]
+            if requested_paths
+            else raw_items[:INTAKE_BATCH_SIZE]
+        )
 
         if not items_to_analyze:
             return {"error": "No items found to analyze"}
 
-        await cl.Message(content=f"Analyzing {len(items_to_analyze)} items... (this may take a moment)").send()
+        await cl.Message(content=f"Analyzing {len(items_to_analyze)} files... (this may take a moment)").send()
 
-        analyses = []
-        for item in items_to_analyze:
-            analysis = analyze_item(item)
-            analyses.append(analysis)
-
+        analyses = [analyze_item(item) for item in items_to_analyze]
         pending.clear()
         pending.extend(analyses)
         cl.user_session.set("pending_analyses", pending)
 
-        table = format_approval_table(analyses)
-        await cl.Message(content=table).send()
-
+        await cl.Message(content=format_approval_table(analyses)).send()
         return {"status": "review_presented", "count": len(analyses)}
 
-    elif name == "eagle_apply_approved":
+    elif name == "catalog_apply_approved":
         changes = inputs.get("changes", [])
         if not changes:
             return {"message": "No changes to apply"}
@@ -207,24 +194,25 @@ async def _execute_tool(name: str, inputs: dict, pending: list) -> dict:
 
         for change in changes:
             log_decision(
-                item_id=change["id"],
+                item_id=change["path"],
                 original_name="",
                 proposed_name=change.get("name", ""),
                 approved=1,
                 final_name=change.get("name", ""),
                 final_tags=change.get("tags", []),
                 final_folder="",
-                confidence=0.0,
+                confidence=change.get("confidence", 0.0),
                 source="user_approved",
             )
 
         return {"applied": ok, "errors": err, "results": results}
 
-    elif name == "eagle_search":
+    elif name == "catalog_search":
         keyword = inputs.get("keyword")
         tags = inputs.get("tags")
+        status = inputs.get("status")
         limit = inputs.get("limit", 20)
-        items = get_items(keyword=keyword, tags=tags, limit=limit)
+        items = get_items(keyword=keyword, tags=tags, status=status, limit=limit)
         return {"count": len(items), "items": [format_item_summary(i) for i in items]}
 
     elif name == "remember_preference":
@@ -241,25 +229,21 @@ async def _execute_tool(name: str, inputs: dict, pending: list) -> dict:
 # ─── Approval handler ──────────────────────────────────────────────────────────
 
 def _looks_like_approval(text: str) -> bool:
-    """Detect if the user's message is responding to an approval table."""
     t = text.lower()
     return (
-        any(c in t for c in ["y", "n"]) and
-        any(char.isdigit() for char in t)
+        any(c in t for c in ["y", "n"]) and any(char.isdigit() for char in t)
     ) or t in ("all-y", "done", "approve all", "reject all")
 
 
 async def _handle_approval(response: str, pending: list):
-    """Process approval response and apply changes."""
     if not pending:
-        await cl.Message(content="No pending review to approve. Run `review` first.").send()
+        await cl.Message(content="No pending review. Type `review` first.").send()
         return
 
     approved_changes, rejected_items, messages = parse_approval_response(response, pending)
 
-    if messages:
-        for m in messages:
-            await cl.Message(content=f"Note: {m}").send()
+    for m in messages:
+        await cl.Message(content=f"Note: {m}").send()
 
     summary_lines = []
 
@@ -269,20 +253,20 @@ async def _handle_approval(response: str, pending: list):
         err = sum(1 for r in results if r["status"] == "error")
 
         for change in approved_changes:
-            a = next((x for x in pending if x["item_id"] == change["id"]), {})
+            a = next((x for x in pending if x["item_id"] == change["path"]), {})
             log_decision(
-                item_id=change["id"],
+                item_id=change["path"],
                 original_name=a.get("original_name", ""),
                 proposed_name=change.get("name", ""),
                 approved=1,
                 final_name=change.get("name", ""),
                 final_tags=change.get("tags", []),
-                final_folder=a.get("suggested_folder", ""),
+                final_folder="",
                 confidence=a.get("confidence", 0.0),
                 source=a.get("analysis_source", ""),
             )
 
-        summary_lines.append(f"Applied {ok} changes" + (f", {err} errors" if err else ""))
+        summary_lines.append(f"Cataloged {ok} file{'s' if ok != 1 else ''}" + (f", {err} errors" if err else ""))
 
     if rejected_items:
         for r in rejected_items:
@@ -297,12 +281,12 @@ async def _handle_approval(response: str, pending: list):
                 confidence=0.0,
                 source="user_rejected",
             )
-        summary_lines.append(f"Skipped {len(rejected_items)} items (logged)")
+        summary_lines.append(f"Skipped {len(rejected_items)} file{'s' if len(rejected_items) != 1 else ''} (logged)")
 
     if response.lower() != "done":
         remaining = len(pending) - len(approved_changes) - len(rejected_items)
         if remaining > 0:
-            summary_lines.append(f"{remaining} items still in this batch — type row numbers or `done` to finish")
+            summary_lines.append(f"{remaining} remaining — continue with row numbers or `done`")
 
     pending.clear()
     cl.user_session.set("pending_analyses", [])
