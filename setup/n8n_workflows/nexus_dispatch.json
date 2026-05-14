@@ -1,0 +1,88 @@
+{
+  "name": "NEXUS Dispatch — Daily Status Sync",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "hours",
+              "hoursInterval": 24
+            }
+          ]
+        }
+      },
+      "id": "schedule-trigger",
+      "name": "Daily Trigger",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.1,
+      "position": [240, 300]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "http://host.docker.internal:11434/api/tags",
+        "options": {
+          "timeout": 5000
+        }
+      },
+      "id": "ollama-health",
+      "name": "Check Ollama Health",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [460, 300]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "http://host.docker.internal:8000",
+        "options": {
+          "timeout": 5000,
+          "response": {
+            "response": {
+              "neverError": true
+            }
+          }
+        }
+      },
+      "id": "agent-health",
+      "name": "Check Cluad Agent Health",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [460, 460]
+    },
+    {
+      "parameters": {
+        "jsCode": "const ollamaOk = $('Check Ollama Health').first().json?.models !== undefined;\nconst agentOk = $('Check Cluad Agent Health').first().json?.statusCode !== 503;\n\nconst status = {\n  timestamp: new Date().toISOString(),\n  ollama: ollamaOk ? 'up' : 'down',\n  cluad_agent: agentOk ? 'up' : 'down',\n  summary: `NEXUS daily check: Ollama=${ollamaOk ? 'UP' : 'DOWN'}, Agent=${agentOk ? 'UP' : 'DOWN'}`\n};\n\nreturn [{ json: status }];"
+      },
+      "id": "build-status",
+      "name": "Build Status Report",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [680, 380]
+    }
+  ],
+  "connections": {
+    "Daily Trigger": {
+      "main": [
+        [
+          {"node": "Check Ollama Health", "type": "main", "index": 0},
+          {"node": "Check Cluad Agent Health", "type": "main", "index": 0}
+        ]
+      ]
+    },
+    "Check Ollama Health": {
+      "main": [[{"node": "Build Status Report", "type": "main", "index": 0}]]
+    },
+    "Check Cluad Agent Health": {
+      "main": [[{"node": "Build Status Report", "type": "main", "index": 0}]]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "meta": {
+    "templateId": "nexus-dispatch-v1",
+    "description": "Daily health check for NEXUS stack — Ollama + Cluad agent. Import this into n8n at localhost:5678."
+  }
+}

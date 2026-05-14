@@ -82,27 +82,25 @@ try {
     Write-Host "  Docker not running — open Docker Desktop first, then re-run" -ForegroundColor Yellow
 }
 
-# ── 7. Eagle API check ────────────────────────────────────────────────────────
-Write-Host "`nChecking Eagle..." -ForegroundColor Yellow
-try {
-    $eagleCheck = Invoke-RestMethod -Uri "http://localhost:41595/api/application/info" -TimeoutSec 3
-    Write-Host "  Eagle is running and API is accessible" -ForegroundColor Green
-} catch {
-    Write-Host "  Eagle not running — open Eagle, then verify API works:" -ForegroundColor Yellow
-    Write-Host "  http://localhost:41595/api/application/info" -ForegroundColor Yellow
-}
+# ── 7. Notion setup reminder ──────────────────────────────────────────────────
+Write-Host "`nNotion File Catalog setup..." -ForegroundColor Yellow
+Write-Host "  1. Go to notion.so/my-integrations and create an integration" -ForegroundColor White
+Write-Host "  2. Copy the 'secret_...' token into .env as NOTION_API_KEY" -ForegroundColor White
+Write-Host "  3. Share your NEXUS File Catalog database with the integration" -ForegroundColor White
+Write-Host "  The agent will confirm connectivity at startup." -ForegroundColor Green
 
 # ── Done ──────────────────────────────────────────────────────────────────────
 Write-Host "`n=== Setup Complete ===" -ForegroundColor Cyan
 Write-Host @"
 
 Next steps:
-  1. Make sure .env has your ANTHROPIC_API_KEY
-  2. Open Eagle (The System needs it running)
-  3. Double-click start.bat to launch the agent
+  1. Make sure .env has your ANTHROPIC_API_KEY and NOTION_API_KEY
+  2. Double-click start.bat to launch the agent
 
 URLs when running:
-  Agent chat  →  http://localhost:8000
-  n8n flows   →  http://localhost:5678
+  Agent chat    →  http://localhost:8000
+  n8n flows     →  http://localhost:5678
+  Open WebUI    →  http://localhost:3000
+  AnythingLLM   →  http://localhost:3001
 
 "@ -ForegroundColor White

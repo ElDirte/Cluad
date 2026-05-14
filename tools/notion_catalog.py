@@ -76,7 +76,7 @@ def get_staging_items(limit: int = 15, offset: int = 0) -> tuple[list[dict], str
         folder = Path(folder_str)
         if not folder.exists():
             continue
-        for f in sorted(folder.iterdir()):
+        for f in sorted(folder.rglob("*")):
             if not f.is_file():
                 continue
             ext = f.suffix.lstrip(".").lower()
@@ -89,7 +89,7 @@ def get_staging_items(limit: int = 15, offset: int = 0) -> tuple[list[dict], str
                 "name": f.stem,
                 "ext": ext,
                 "size": f.stat().st_size,
-                "folder": folder_str,
+                "folder": str(f.parent),
             })
 
     page = new_files[offset: offset + limit]

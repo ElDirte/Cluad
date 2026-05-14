@@ -13,13 +13,8 @@ if not exist ".env" (
     exit /b 1
 )
 
-REM Check Eagle is running
-curl -s http://localhost:41595/api/application/info >nul 2>&1
-if %errorlevel% neq 0 (
-    echo WARNING: Eagle does not appear to be running.
-    echo Open Eagle, then press any key to continue...
-    pause >nul
-)
+REM Notion connectivity is checked by the agent at startup.
+REM Make sure NOTION_API_KEY is set in .env before proceeding.
 
 REM Activate venv and launch Chainlit
 echo Starting agent at http://localhost:8000

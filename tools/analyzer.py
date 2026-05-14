@@ -34,14 +34,14 @@ def _analyze_image_with_ollama(image_bytes: bytes, filename: str) -> dict:
     """Send image to Ollama llava for vision analysis."""
     b64 = base64.b64encode(image_bytes).decode()
     prompt = (
-        f"Analyze this image (filename: {filename}). Describe:\n"
-        "1. What is shown in the image (objects, scene, people, text, UI elements, etc.)\n"
-        "2. What type of image is it (photo, screenshot, diagram, artwork, meme, etc.)\n"
-        "3. What was this likely saved for (design reference, memory, reminder, AI reference, "
-        "project material, research, personal archive, inspiration)?\n"
-        "4. Suggest a short descriptive filename (no extension, lowercase, hyphens only, max 5 words)\n"
-        "5. Suggest 3-5 tags using these prefixes: use:, topic:, src:, q:\n"
-        "Be concise. Format as: TYPE | SUMMARY | SUGGESTED_NAME | TAGS | CONFIDENCE(0-100)"
+        f"Analyze this image (filename: {filename}). Respond in this exact format:\n"
+        "TYPE: photo/screenshot/diagram/artwork/meme/etc\n"
+        "SUMMARY: one sentence describing what this is and why it was likely saved\n"
+        "NAME: YYYY-MM-DD_topic_use_shortdesc (lowercase, hyphens, max 5 words in desc, no extension)\n"
+        "TAGS: use:X, topic:X, src:X, q:X (3-5 tags using these prefixes only)\n"
+        "QUALITY: keep/maybe/low\n"
+        "CONFIDENCE: 0-100\n"
+        "REASON: one sentence explaining your confidence level"
     )
 
     try:
@@ -218,13 +218,18 @@ def parse_approval_response(
                 messages.append(f"Skipped `{a['original_name']}` (confidence too low for auto-approve)")
         return approved, rejected, messages
 
-    for token in response.split():
-        row_match = re.match(r"^(\d+)(y|n|edit)", token)
+    # rejoin to handle multi-word edit commands, then re-split on row boundaries
+    tokens = re.split(r"(?=\d+(?:y|n|edit))", response)
+
+    for token in tokens:
+        token = token.strip()
+        row_match = re.match(r"^(\d+)(y|n|edit)(.*)", token, re.IGNORECASE)
         if not row_match:
             continue
 
         idx = int(row_match.group(1)) - 1
-        action = row_match.group(2)
+        action = row_match.group(2).lower()
+        rest = row_match.group(3).strip()
 
         if idx < 0 or idx >= len(analyses):
             messages.append(f"Row {idx + 1} out of range")
@@ -235,6 +240,17 @@ def parse_approval_response(
             approved.append(_analysis_to_change(a))
         elif action == "n":
             rejected.append({"item_id": a["item_id"], "original_name": a["original_name"]})
+        elif action == "edit":
+            change = _analysis_to_change(a)
+            # parse name=... and tags=... overrides from rest of token
+            name_match = re.search(r"name=([^\s]+)", rest)
+            tags_match = re.search(r"tags=([^\s]+)", rest)
+            if name_match:
+                change["name"] = name_match.group(1)
+            if tags_match:
+                change["tags"] = [t.strip() for t in tags_match.group(1).split(",") if t.strip()]
+            approved.append(change)
+            messages.append(f"Row {idx + 1} edited before apply")
 
     return approved, rejected, messages
 

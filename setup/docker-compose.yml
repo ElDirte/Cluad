@@ -34,6 +34,27 @@ services:
     extra_hosts:
       - "host.docker.internal:host-gateway"
 
+  anythingllm:
+    image: mintplexlabs/anythingllm:latest
+    container_name: nexus-anythingllm
+    restart: unless-stopped
+    ports:
+      - "3001:3001"
+    environment:
+      - STORAGE_DIR=/app/server/storage
+      - LLM_PROVIDER=ollama
+      - OLLAMA_BASE_PATH=http://host.docker.internal:11434
+      - EMBEDDING_ENGINE=ollama
+      - EMBEDDING_BASE_PATH=http://host.docker.internal:11434
+      - EMBEDDING_MODEL_PREF=llama3.1:8b
+    volumes:
+      - anythingllm_data:/app/server/storage
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    cap_add:
+      - SYS_ADMIN
+
 volumes:
   n8n_data:
   open-webui_data:
+  anythingllm_data:
